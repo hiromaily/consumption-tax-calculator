@@ -1,5 +1,7 @@
 # consumption-tax-calculator
-consumption tax calculator
+
+消費税の確定申告に必要な情報を算出する。
+
 
 ```sh
 ❯ python3 main.py
@@ -12,3 +14,11 @@ consumption tax calculator
 中間納付（国税）があれば入力（なければ空欄/0）: 449000
 中間納付（地方）があれば入力（なければ空欄/0）: 120200
 ```
+
+## Dependencies
+
+1. [just](https://github.com/casey/just): コマンドランナー
+
+   ```sh
+   brew install just
+   ```

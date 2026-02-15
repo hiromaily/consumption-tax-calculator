@@ -8,24 +8,30 @@ from typing import Optional
 YEAR = 2025
 REIWA = 7
 
-DEEMED_PURCHASE_RATE = Decimal("0.50")   # 第5種（みなし仕入率50%）
-NATIONAL_RATE = Decimal("0.078")         # 標準税率10%のうち国税7.8%
-LOCAL_NUM = Decimal("22")                # 地方＝国税差引 × 22/78
+DEEMED_PURCHASE_RATE = Decimal("0.50")  # 第5種（みなし仕入率50%）
+NATIONAL_RATE = Decimal("0.078")  # 標準税率10%のうち国税7.8%
+LOCAL_NUM = Decimal("22")  # 地方＝国税差引 × 22/78
 LOCAL_DEN = Decimal("78")
+
 
 def yen_floor(x: Decimal) -> int:
     """円未満切捨て"""
     return int(x.quantize(Decimal("1"), rounding=ROUND_DOWN))
 
+
 def hundred_yen_floor_int(n: int) -> int:
     """100円未満切捨て（= 1円単位の値を100円単位に切捨て）"""
     return (n // 100) * 100
+
 
 def thousand_yen_floor(x: Decimal) -> int:
     """千円未満切捨て（課税標準額）"""
     return int((x // Decimal("1000")) * Decimal("1000"))
 
-def ask_int_yen(prompt: str, default: Optional[int] = None, allow_blank: bool = False) -> int:
+
+def ask_int_yen(
+    prompt: str, default: Optional[int] = None, allow_blank: bool = False
+) -> int:
     while True:
         s = input(prompt).strip()
         if s == "":
@@ -43,16 +49,17 @@ def ask_int_yen(prompt: str, default: Optional[int] = None, allow_blank: bool = 
         except Exception:
             print("  -> 数値で入力してください（例：12101430）。")
 
+
 def calc_all(
     gross_sales_yen: int,
     base_period_sales_excl_yen: int,
     interim_national_yen: int,
-    interim_local_yen: int
+    interim_local_yen: int,
 ):
     gross = Decimal(gross_sales_yen)
 
     # A) この課税期間の課税売上高（税抜、円単位）
-    #   12,101,430 / 1.1 = 11,001,300.0 のようにピタっと出るケース想定
+    # TODO: 現在、12,101,430 / 1.1 = 11,001,300.0 のようにピタっと出るケース想定しているが、そうでない場合も考慮する
     taxable_sales_excl = gross / Decimal("1.10")
     taxable_sales_excl_yen = yen_floor(taxable_sales_excl)  # 念のため円未満切捨て
 
@@ -99,33 +106,36 @@ def calc_all(
 
     return {
         "gross_sales": gross_sales_yen,
-        "taxable_sales_excl": taxable_sales_excl_yen,     # この課税期間の課税売上高（税抜）
+        "taxable_sales_excl": taxable_sales_excl_yen,  # この課税期間の課税売上高（税抜）
         "base_period_sales_excl": base_period_sales_excl_yen,  # 基準期間の課税売上高（税抜）
-        "taxable_base": taxable_base_yen,                 # 第一表①
-        "national_tax_raw": national_tax_raw,             # 第一表②（7.8%）
-        "base_national_tax": base_national_tax,           # 付表5-3 基礎
-        "input_tax_credit": input_tax_credit,             # 付表5-3/第一表（控除対象仕入税額相当）
+        "taxable_base": taxable_base_yen,  # 第一表①
+        "national_tax_raw": national_tax_raw,  # 第一表②（7.8%）
+        "base_national_tax": base_national_tax,  # 付表5-3 基礎
+        "input_tax_credit": input_tax_credit,  # 付表5-3/第一表（控除対象仕入税額相当）
         "national_net_raw": national_net_raw,
-        "national_net": national_net,                     # 第一表⑨（差引税額）
+        "national_net": national_net,  # 第一表⑨（差引税額）
         "interim_national": interim_national,
         "national_payable_raw": national_payable_raw,
-        "national_payable": national_payable,             # 第一表⑪（納付税額）
-        "local_tax_base": local_tax_base,                 # 第一表（地方の基礎）
+        "national_payable": national_payable,  # 第一表⑪（納付税額）
+        "local_tax_base": local_tax_base,  # 第一表（地方の基礎）
         "local_tax_raw": local_tax_raw,
-        "local_tax": local_tax,                           # 第一表⑳（納税額イメージ）
+        "local_tax": local_tax,  # 第一表⑳（納税額イメージ）
         "interim_local": interim_local,
         "local_payable_raw": local_payable_raw,
-        "local_payable": local_payable,                   # 第一表㉒（納付譲渡割額イメージ）
-        "total_payable": total_payable,                   # 第一表㉖（合計）
+        "local_payable": local_payable,  # 第一表㉒（納付譲渡割額イメージ）
+        "total_payable": total_payable,  # 第一表㉖（合計）
     }
+
 
 def print_forms(r: dict):
     print("\n" + "=" * 72)
     print(f"【{YEAR}年分（令和{REIWA}年分）】消費税申告（簡易課税・第5種） 出力")
     print("前提：10%のみ／税込経理／非課税・不課税・売上以外収入なし／調整なし")
-    print("端数：課税標準額＝千円未満切捨て、差引・納付・地方＝100円未満切捨て（運用合わせ）")
+    print(
+        "端数：課税標準額＝千円未満切捨て、差引・納付・地方＝100円未満切捨て（運用合わせ）"
+    )
     print("=" * 72)
-    print("\n■ 0固定としている前提（ここが崩れると差が出ます）")
+    print("\n■ 0固定としている前提（ここが崩れると差が出るので注意）")
     print("  ・軽減税率(8%)売上なし")
     print("  ・非課税/不課税取引なし（立替・補助金・利息等なし）")
     print("  ・返品・値引・貸倒・資産譲渡等の調整なし")
@@ -133,24 +143,42 @@ def print_forms(r: dict):
 
     # 付表5-3（簡易課税）
     print("\n■ 付表5-3（簡易課税用）に記入する値（第5種：みなし仕入率50%）")
-    print(f"  ・課税売上高（税込）                          ：{r['gross_sales']:,} 円（入力値）")
-    print(f"  ・この課税期間の課税売上高（税抜）             ：{r['taxable_sales_excl']:,} 円（不足分として追加）")
-    print(f"  ・課税標準額（千円未満切捨て）                 ：{r['taxable_base']:,} 円（→ 第一表①/第二表へ）")
-    print(f"  ・消費税額（国税7.8%）                         ：{r['national_tax_raw']:,} 円（→ 第一表②/第二表へ）")
-    print(f"  ・基礎となる消費税額                           ：{r['base_national_tax']:,} 円（調整なし前提）")
-    print(f"  ・みなし仕入率                                 ：50%（第5種）")
-    print(f"  ・控除対象仕入税額（= 基礎×50%）               ：{r['input_tax_credit']:,} 円")
+    print(
+        f"  ・課税売上高（税込）                          ：{r['gross_sales']:,} 円（入力値）"
+    )
+    print(
+        f"  ・この課税期間の課税売上高（税抜）             ：{r['taxable_sales_excl']:,} 円（不足分として追加）"
+    )
+    print(
+        f"  ・課税標準額（千円未満切捨て）                 ：{r['taxable_base']:,} 円（→ 第一表①/第二表へ）"
+    )
+    print(
+        f"  ・消費税額（国税7.8%）                         ：{r['national_tax_raw']:,} 円（→ 第一表②/第二表へ）"
+    )
+    print(
+        f"  ・基礎となる消費税額                           ：{r['base_national_tax']:,} 円（調整なし前提）"
+    )
+    print("  ・みなし仕入率                                 ：50%（第5種）")
+    print(
+        f"  ・控除対象仕入税額（= 基礎×50%）               ：{r['input_tax_credit']:,} 円"
+    )
 
     # 控除税額ブロック
     control_4 = r["input_tax_credit"]  # ④ 控除対象仕入税額（簡易課税）
-    control_5 = 0                      # ⑤ 返還等（前提で0）
-    control_6 = 0                      # ⑥ その他（前提で0）
+    control_5 = 0  # ⑤ 返還等（前提で0）
+    control_6 = 0  # ⑥ その他（前提で0）
     control_7 = control_4 + control_5 + control_6  # ⑦ ④+⑤+⑥
-    # TODO: ⑧控除不足還付税額 ⑦-②-③
+    control_8 = 0  # TODO: ⑧控除不足還付税額 ⑦-②-③
 
-    print("\n■ 申告書 第一表（消費税：国税分）に記入する値（あなたの様式の欄番号に合わせる）")
-    print(f"  第一表① 課税標準額                              ：{r['taxable_base']:,} 円")
-    print(f"  第一表② 消費税額（7.8%）                        ：{r['national_tax_raw']:,} 円")
+    print(
+        "\n■ 申告書 第一表（消費税：国税分）に記入する値（あなたの様式の欄番号に合わせる）"
+    )
+    print(
+        f"  第一表① 課税標準額                              ：{r['taxable_base']:,} 円"
+    )
+    print(
+        f"  第一表② 消費税額（7.8%）                        ：{r['national_tax_raw']:,} 円"
+    )
     print("  第一表③ 貸倒れに係る税額等                      ：0 円（前提）")
 
     print(f"  第一表④ 控除対象仕入税額（簡易課税）             ：{control_4:,} 円")
@@ -158,52 +186,94 @@ def print_forms(r: dict):
     print(f"  第一表⑥ その他の控除税額等                      ：{control_6:,} 円")
     print(f"  第一表⑦ 控除税額の計（④+⑤+⑥）                  ：{control_7:,} 円")
     # TODO: ⑧控除不足還付税額 ⑦-②-③
-    
+    # print(f"  第一表⑧控除不足還付税額 ⑦-②-③                  ：{control_8:,} 円")
+
     # ※差引税額の計算は「②（基礎）−⑦（控除税額計）」でOK
     national_net_raw = r["base_national_tax"] - control_7
-    national_net = (national_net_raw // 100) * 100  # 100円未満切捨て（あなたの運用合わせ）
+    national_net = (national_net_raw // 100) * 100  # 100円未満切捨て（要検討）
 
-    print(f"  第一表⑨ 差引税額 (②−⑦)【100円未満切捨て】      ：{national_net:,} 円"
-        f"（参考：切捨て前 {national_net_raw:,} 円）")
-    print(f"  第一表⑩ 中間納付税額（国税）                     ：{r['interim_national']:,} 円")
+    print(
+        f"  第一表⑨ 差引税額 (②−⑦)【100円未満切捨て】      ：{national_net:,} 円"
+        f"（参考：切捨て前 {national_net_raw:,} 円）"
+    )
+    print(
+        f"  第一表⑩ 中間納付税額（国税）                     ：{r['interim_national']:,} 円"
+    )
 
     national_payable_raw = national_net - r["interim_national"]
     national_payable = (national_payable_raw // 100) * 100  # 100円未満切捨て
 
-    print(f"  第一表⑪ 納付税額（国税）【100円未満切捨て】       ：{national_payable:,} 円"
-        f"（参考：切捨て前 {national_payable_raw:,} 円）")
-    print("  第一表⑫ 中間納付還付税額                         ：0 円（今回は未計算/必要なら分岐）")
-    print(f"  第一表⑮ この課税期間の課税売上高（税抜）           ：{r['taxable_sales_excl']:,} 円")
-    print(f"  第一表⑯ 基準期間の課税売上高（税抜）               ：{r['base_period_sales_excl']:,} 円")
+    print(
+        f"  第一表⑪ 納付税額（国税）【100円未満切捨て】       ：{national_payable:,} 円"
+        f"（参考：切捨て前 {national_payable_raw:,} 円）"
+    )
+    print(
+        "  第一表⑫ 中間納付還付税額                         ：0 円（今回は未計算/必要なら分岐）"
+    )
+    print(
+        f"  第一表⑮ この課税期間の課税売上高（税抜）           ：{r['taxable_sales_excl']:,} 円"
+    )
+    print(
+        f"  第一表⑯ 基準期間の課税売上高（税抜）               ：{r['base_period_sales_excl']:,} 円"
+    )
 
     # 第一表（地方消費税）
     print("\n■ 申告書 第一表（地方消費税）に記入する値")
-    print(f"  第一表⑱ 地方課税標準となる消費税額（基礎：差引税額）       ：{r['local_tax_base']:,} 円")
-    print(f"  第一表⑳ 譲渡割額（納税額）【100円未満切捨て】          ：{r['local_tax']:,} 円"
-          f"（参考：切捨て前 {r['local_tax_raw']:,} 円）")
-    print(f"  第一表㉑ 中間納付譲渡割額（地方）                            ：{r['interim_local']:,} 円")
-    print(f"  第一表㉒ 納付譲渡割額（地方）【100円未満切捨て】              ：{r['local_payable']:,} 円"
-          f"（参考：切捨て前 {r['local_payable_raw']:,} 円）")
+    print(
+        f"  第一表⑱ 地方課税標準となる消費税額（基礎：差引税額）       ：{r['local_tax_base']:,} 円"
+    )
+    print(
+        f"  第一表⑳ 譲渡割額（納税額）【100円未満切捨て】          ：{r['local_tax']:,} 円"
+        f"（参考：切捨て前 {r['local_tax_raw']:,} 円）"
+    )
+    print(
+        f"  第一表㉑ 中間納付譲渡割額（地方）                            ：{r['interim_local']:,} 円"
+    )
+    print(
+        f"  第一表㉒ 納付譲渡割額（地方）【100円未満切捨て】              ：{r['local_payable']:,} 円"
+        f"（参考：切捨て前 {r['local_payable_raw']:,} 円）"
+    )
 
     # 合計
     print("\n■ 消費税及び地方消費税の合計（納付）税額")
-    print(f"  第一表㉖ 合計納付税額（国税＋地方）                           ：{r['total_payable']:,} 円")
+    print(
+        f"  第一表㉖ 合計納付税額（国税＋地方）                           ：{r['total_payable']:,} 円"
+    )
 
     # 第二表（内訳）
     print("\n■ 申告書 第二表（税率別内訳：10%のみ想定）に記入する値")
-    print(f"  第二表① 課税標準額                              ：{r['taxable_base']:,} 円")
+    print(
+        f"  第二表① 課税標準額                              ：{r['taxable_base']:,} 円"
+    )
     print("  【7.8%適用分（標準税率10%の国税分）】")
-    print(f"  第二表⑥  課税資産の譲渡等の対価の額の合計額（7.8%適用分: 税抜）          ：{r['taxable_sales_excl']:,} 円")
-    print(f"  第二表⑦  ②-⑥の合計                                    ：{r['taxable_sales_excl']:,} 円")
-    print(f"  第二表⑪  消費税額                                       ：{r['national_tax_raw']:,} 円")
-    print(f"  第二表⑯  ⑪の内訳（7.8%適用分）                          ：{r['national_tax_raw']:,} 円")
-    print(f"  第二表⑳  地方消費税の課税標準となる消費税額（㉑-㉓の合計）    ：{r['local_tax_base']:,} 円")
-    print(f"  第二表⑳  地方消費税の課税標準となる消費税額（7.8%適用分）    ：{r['local_tax_base']:,} 円")
+    print(
+        f"  第二表⑥  課税資産の譲渡等の対価の額の合計額（7.8%適用分: 税抜）          ：{r['taxable_sales_excl']:,} 円"
+    )
+    print(
+        f"  第二表⑦  ②-⑥の合計                                    ：{r['taxable_sales_excl']:,} 円"
+    )
+    print(
+        f"  第二表⑪  消費税額                                       ：{r['national_tax_raw']:,} 円"
+    )
+    print(
+        f"  第二表⑯  ⑪の内訳（7.8%適用分）                          ：{r['national_tax_raw']:,} 円"
+    )
+    print(
+        f"  第二表⑳  地方消費税の課税標準となる消費税額（㉑-㉓の合計）    ：{r['local_tax_base']:,} 円"
+    )
+    print(
+        f"  第二表⑳  地方消費税の課税標準となる消費税額（7.8%適用分）    ：{r['local_tax_base']:,} 円"
+    )
     print("=" * 72)
 
+
 def main():
-    print(f"=== 消費税申告（簡易課税）{YEAR}年分（令和{REIWA}年分）/ 第5種(50%) / 10%のみ ===")
-    print("入力：所得税の確定申告書 第一表「収入金額等（事業）」の金額（税込）を想定します。")
+    print(
+        f"=== 消費税申告（簡易課税）{YEAR}年分（令和{REIWA}年分）/ 第5種(50%) / 10%のみ ==="
+    )
+    print(
+        "入力：所得税の確定申告書 第一表「収入金額等（事業）」の金額（税込）を想定します。"
+    )
     print("（前提：非課税・不課税・売上以外収入・8%売上・調整事項なし）\n")
 
     gross = ask_int_yen("今季の事業収入（税込）を入力してください: ")
@@ -212,11 +282,16 @@ def main():
         "基準期間（2期前）の課税売上高（税抜）を入力してください: "
     )
 
-    interim_nat = ask_int_yen("中間納付（国税）があれば入力（なければ空欄/0）: ", default=0, allow_blank=True)
-    interim_loc = ask_int_yen("中間納付（地方）があれば入力（なければ空欄/0）: ", default=0, allow_blank=True)
+    interim_nat = ask_int_yen(
+        "中間納付（国税）があれば入力（なければ空欄/0）: ", default=0, allow_blank=True
+    )
+    interim_loc = ask_int_yen(
+        "中間納付（地方）があれば入力（なければ空欄/0）: ", default=0, allow_blank=True
+    )
 
     r = calc_all(gross, base_sales, interim_nat, interim_loc)
     print_forms(r)
+
 
 if __name__ == "__main__":
     main()
