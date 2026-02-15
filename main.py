@@ -59,9 +59,9 @@ def calc_all(
     gross = Decimal(gross_sales_yen)
 
     # A) この課税期間の課税売上高（税抜、円単位）
-    # TODO: 現在、12,101,430 / 1.1 = 11,001,300.0 のようにピタっと出るケース想定しているが、そうでない場合も考慮する
+    # 税込額 / 1.10 で割り切れない場合は円未満切捨て
     taxable_sales_excl = gross / Decimal("1.10")
-    taxable_sales_excl_yen = yen_floor(taxable_sales_excl)  # 念のため円未満切捨て
+    taxable_sales_excl_yen = yen_floor(taxable_sales_excl)  # 円未満切捨て
 
     # B) 課税標準額（千円未満切捨て）
     taxable_base_yen = thousand_yen_floor(Decimal(taxable_sales_excl_yen))
@@ -141,37 +141,68 @@ def print_forms(r: dict):
     print("  ・返品・値引・貸倒・資産譲渡等の調整なし")
     print("=" * 72)
 
+    # 付表4-3（簡易課税）
+    print("\n■ 付表4-3: 税率別消費税額計算表（簡易課税用, 第5種：みなし仕入率50%）")
+    print(
+        f"  ・課税標準額（税率7.8%）①                          ：{r['taxable_base']:,} 円"
+    )
+    print(
+        f"  ・課税資産の譲渡等の対価の額（税率7.8%）① -1           ：{r['taxable_sales_excl']:,} 円"
+    )
+    print(
+        f"  ・消費税額（税率7.8%）②                          ：{r['national_tax_raw']:,} 円"
+    )
+    print(
+        f"  ・控除税額: 控除対象仕入税額（税率7.8%）④           ：{r['input_tax_credit']:,} 円"
+    )
+    print(
+        f"  ・控除税額: 控除税額小計（税率7.8%）⑦           ：{r['input_tax_credit']:,} 円"
+    )
+    # 差引税額 = ② + ③ - ⑦（③は0とみなす）
+    fusenhyo4_3_sashihiki = r["national_tax_raw"] - r["input_tax_credit"]
+    fusenhyo4_3_sashihiki_100 = (fusenhyo4_3_sashihiki // 100) * 100  # 100円未満切捨て
+    print(
+        f"  ・差引税額⑨と⑪（②+③-⑦）【100円未満切捨て】  ：{fusenhyo4_3_sashihiki_100:,} 円"
+        f"（参考：切捨て前 {fusenhyo4_3_sashihiki:,} 円）"
+    )
+    print(
+        f"  ・譲渡割額: 納税額 ⑬                         ：{r['local_tax']:,} 円"
+    )
+
     # 付表5-3（簡易課税）
-    print("\n■ 付表5-3（簡易課税用）に記入する値（第5種：みなし仕入率50%）")
+    print("\n■ 付表5-3: 控除対象仕入れ税額等の計算表（簡易課税用, 第5種：みなし仕入率50%）")
     print(
-        f"  ・課税売上高（税込）                          ：{r['gross_sales']:,} 円（入力値）"
+        f"  ・課税標準額に対する消費税額（税率7.8%）①        ：{r['national_tax_raw']:,} 円"
     )
     print(
-        f"  ・この課税期間の課税売上高（税抜）             ：{r['taxable_sales_excl']:,} 円（不足分として追加）"
-    )
-    print(
-        f"  ・課税標準額（千円未満切捨て）                 ：{r['taxable_base']:,} 円（→ 第一表①/第二表へ）"
-    )
-    print(
-        f"  ・消費税額（国税7.8%）                         ：{r['national_tax_raw']:,} 円（→ 第一表②/第二表へ）"
-    )
-    print(
-        f"  ・基礎となる消費税額                           ：{r['base_national_tax']:,} 円（調整なし前提）"
+        f"  ・基礎となる消費税額 ④                         ：{r['base_national_tax']:,} 円（調整なし前提）"
     )
     print("  ・みなし仕入率                                 ：50%（第5種）")
     print(
         f"  ・控除対象仕入税額（= 基礎×50%）               ：{r['input_tax_credit']:,} 円"
     )
+    # print(
+    #     f"  ・この課税期間の課税売上高（税抜）             ：{r['taxable_sales_excl']:,} 円（不足分として追加）"
+    # )
+    # print(
+    #     f"  ・課税標準額（千円未満切捨て）                 ：{r['taxable_base']:,} 円（→ 第一表①/第二表へ）"
+    # )
+    # print(
+    #     f"  ・消費税額（税率7.8%）                         ：{r['national_tax_raw']:,} 円（→ 第一表②/第二表へ）"
+    # )
 
     # 控除税額ブロック
+    control_3 = 0  # ③ 貸倒れに係る税額等（前提で0）
     control_4 = r["input_tax_credit"]  # ④ 控除対象仕入税額（簡易課税）
     control_5 = 0  # ⑤ 返還等（前提で0）
     control_6 = 0  # ⑥ その他（前提で0）
     control_7 = control_4 + control_5 + control_6  # ⑦ ④+⑤+⑥
-    control_8 = 0  # TODO: ⑧控除不足還付税額 ⑦-②-③
+    # ⑧ 控除不足還付税額 = ⑦ - ② - ③（⑦が②+③を上回る場合のみ発生）
+    shortfall = control_7 - r["national_tax_raw"] - control_3
+    control_8 = max(shortfall, 0)  # マイナスなら還付なし（0）
 
     print(
-        "\n■ 申告書 第一表（消費税：国税分）に記入する値（あなたの様式の欄番号に合わせる）"
+        "\n■ 申告書 第一表（消費税：国税分）に記入する値"
     )
     print(
         f"  第一表① 課税標準額                              ：{r['taxable_base']:,} 円"
@@ -185,8 +216,7 @@ def print_forms(r: dict):
     print(f"  第一表⑤ 返還等対価に係る税額等                  ：{control_5:,} 円")
     print(f"  第一表⑥ その他の控除税額等                      ：{control_6:,} 円")
     print(f"  第一表⑦ 控除税額の計（④+⑤+⑥）                  ：{control_7:,} 円")
-    # TODO: ⑧控除不足還付税額 ⑦-②-③
-    # print(f"  第一表⑧控除不足還付税額 ⑦-②-③                  ：{control_8:,} 円")
+    print(f"  第一表⑧ 控除不足還付税額（⑦−②−③）              ：{control_8:,} 円")
 
     # ※差引税額の計算は「②（基礎）−⑦（控除税額計）」でOK
     national_net_raw = r["base_national_tax"] - control_7
@@ -262,7 +292,7 @@ def print_forms(r: dict):
         f"  第二表⑳  地方消費税の課税標準となる消費税額（㉑-㉓の合計）    ：{r['local_tax_base']:,} 円"
     )
     print(
-        f"  第二表⑳  地方消費税の課税標準となる消費税額（7.8%適用分）    ：{r['local_tax_base']:,} 円"
+        f"  第二表㉓  地方消費税の課税標準となる消費税額（7.8%適用分）    ：{r['local_tax_base']:,} 円"
     )
     print("=" * 72)
 
